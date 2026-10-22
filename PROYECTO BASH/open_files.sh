@@ -1,126 +1,142 @@
 #!/bin/bash
-# CLASE PROBLEMAS: VIERNES, 16 OCTUBRE 2026
 
-# open_files -s -u jjtoledo dabreu -f archivo.txt
+# VARIABLES GLOBALES
 
-# Procesar la linea de comandos (descrubir que opciones me pasan)
-# - 1. definir una variable para cada opcion que soporta mi programa
-SORT=0
-USERS=""
-FILENAME=""
 
-while [[ "$1" != "" ]]
-do
-    case "$1" in
-        -s | --sort )
-            SORT=1
-        ;;
-        -f | --file )
-            # Por si pone la opcion -f y se olvida el nombre del fichero despues
-            if [[ $2 == "" || $2 == -* ]]; then
-                echo "ERROR. No se ha ingresado el nombre del fichero."
-                exit 1
-                # Usar funcion error_exit "Falta el argumento de $1"
-            fi
-            FILENAME=$2
-            shift
-            ;;
-        -u | --user )
-            if [[ $2 == "" || $2 == -* ]]; then
-                echo "ERROR. Falta el argumento de $1"
-                exit 
-            fi
-            # Usamos una especie de lista para tomar todos los usuarios introducidos
-            while [[ $2 != "" || $2 != -* ]] 
-            do
-            USERS="$USERS $2"
-            shift
-            done
-            ;;
-        # Cualquier otra opcion -ALGO que no tenga yo programada
-        -* )
-            echo "Opcion $1 desconocida"
-            exit 1
-            ;;
-        * )
-            echo "Argumento invalido"
-            exit 1
-            ;;
-    esac
-    shift
-done
+SORT="" # -s
+OFFLINE="" # -o
+LISTA_USERS="" # -u
+REGEX_ARCHIVO="" # -f
 
-# Comprobacion
 
-# - directorio existe ?
-directorio_existe() {
-    if [[ -d "$1"]]; then
+# Funcion para salida mostrando un error
+
+
+error_exit() {
+    echo "ERROR: $1" >&2
+    echo "" >&2
+    usage >&2
+    exit 1
+}
+
+
+# Funcion para mostrar el uso del programa (-h | --help)
+
+
+usage() {
+    cat << _EOF_
+Uso: open_files [-h | --help] [-f regexp] [-o] [--offline] [-u usuario...] [-s] [-sort] [--sort]
+
+Opciones:
+  -h, --help       Muestra este mensaje de ayuda y finaliza con estado 0.
+  -f regexp        Filtra los archivos contados según una expresión regular en la ruta.
+  -o, --offline    Muestra únicamente los usuarios no conectados al sistema.
+  -u usuario...    Lista de usuarios específicos a procesar.
+  -s, -sort, --sort Ordena la tabla por el número de archivos abiertos (de mayor a menor).
+_EOF_
+}
+
+
+# 1. Funcion para procesar la linea de comandos
+
+procesar_argumentos() {
+
+    while [[ "$1" != "" ]]
+    do
+        case "$1" in
+            -h | --help)
+                usage 
+                exit 0
+                ;;
+            -o | --offline)
+                OFFLINE=1
+                shift
+                ;;
+            -f | --file)
+                shift
+                if [[ "$1" == "" || "$1" == -* ]]; then
+                    error_exit "Falta el argumento de -f"
+                fi
+                REGEX_ARCHIVO="$1"
+                shift
+                ;;
+            -u)
+                shift 
+                if [[ "$1" == "" || "$1" == -* ]]; then
+                    error_exit "Falta el argumento de -u"
+                fi
+                while [[ "$1" != "" &&  "$1" != -* ]]
+                do
+                    LISTA_USERS="$LISTA_USERS $1"
+                    shift
+                done
+                ;;
+            -s | --sort)
+                SORT=1
+                shift
+                ;;
+            -*)
+                error_exit "Opcion $1 no valida"
+                ;;
+            *)
+                error_exit "Argumento $1 no valido"
+                ;;
+        esac
+    done
+}
+
+# Leer parametros
+procesar_argumentos "$@"
+
+
+
+# 2. Comprobaciones
+
+# - Comprobacion de OPEN_FILE_FOLDER (si esta definida)
+
+
+# Funcion que comprueba si un directorio existe (nos interesa solo el estado de salida; 0 o 1)
+existe_directorio() {
+
+    if [[ -d "$1" ]]; then
         return 0
     else 
         return 1
     fi
 }
 
-if ! directorio_existe $DIR; then
-    error_exit "El directorio $DIR no existe"
+if [[ "$OPEN_FILES_FOLDER" != "" ]]; then
+    if ! existe_directorio "$OPEN_FILES_FOLDER"; then
+        error_exit "La ruta OPEN_FILES_FOLDER no existe o no es un directorio: $OPEN_FILES_FOLDER."
+    fi
 fi
 
 
-# - lsof instalado ?
-lsof_esta_instalado() {
-    # Solo interesa el estado de salida ($?), para luego la llamada, por eso ignoramos todo el texto
+# - Comprobacion de si lsof esta instalado 
+
+
+lsof_instalado() {
     type lsof > /dev/null 2> /dev/null
 }
 
-if ! lsof_esta_instalado; then
-    error_exit "lsof no esta instalado."
+if ! lsof_instalado; then
+    error_exit "No esta instalado el comando lsof."
 fi
 
-get_id_usuario() {
-    id "$1" 2> /dev/null
-}
 
-# - los usuarios existen ?
-usuario_existe() {
-    # Solo interesa estado de salida ($?)
+# - Comprobacion de que los usuarios existan
+
+
+# Funcion que comprueba si un usuario existe (nos interesa solo el estado de salida; 0 o 1)
+existe_usuario() {
     id "$1" > /dev/null 2> /dev/null
 }
 
-for users in $USERS; do
-    if ! usuario_existe $user; then
-        error_exit "El usuario $1 no existe."
+for users in $LISTA_USERS; do
+    if ! existe_usuario "$users"; then
+        # Usamos comillas simples ('') para que cuando se imprima se vea el nombre de usuario entre comillas simples, no por sintaxis
+        error_exit "El usuario '$users' no existe en el sistema."
     fi
-    ID_USUARIO=$(get_id_usuario $user)
 done
 
-# - el archivo existen ?
-# - las opciones son compatibles ?
-
-
-
-# Logica del programa
-
-# Para la salida  --> printf
-SORT_CMD= "sort -k1,1" # ponemos 1,1 para que ordene solo la primera (desde la 1 a la 1)
-FORMATO="%s %s %s %s\n"
-
-# Para ordenar numericamente segun la 4ta columna (PID) en caso de que activen la opcion -s (SORT=1)
-if [[ $SORT == 1 ]]; then
-    SORT_CMD="sort -k4,4n"
-fi
-
-printf "$FORMATO" USUARIO UID PID_ANTIGUO N_ARCHIVOS
-for user in $USERS
-do
-    printf "$FORMATO" $user $(get_id_usuario $user) $(get_pid_antiguo $user) $(get_archivos_abiertos $user)
-# Esto nos permite , la salida del for se la enchufa al sort, y lo ordena
-done | $SORT_CMD 
-
-# ps -u user -o pid --no-header --sort=user 
-# lsof -u user --> Los ficheros abiertos por el usuario user
-# lsof +D /ruta -> Los ficheros abiertos en el directorio /ruta
-# lsof -u user -a +D /ruta -> Los ficheros de user en directorio ruta, el -a es para hacer un AND y que se cumplan ambas condiciones a la vez
-# lsof -u user -a +D /ruta | wc -l -> Numero de ficheros que tiene el usuario user en el directorio ruta
-
-
-
+# 3. Logica del programa
