@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# VARIABLES GLOBALES
+# Variables
 
 
 SORT="" # -s
 OFFLINE="" # -o
 LISTA_USERS="" # -u
-REGEX_ARCHIVO="" # -f
+REGEX="" # -f
+DIR="${OPEN_FILES_FOLDER:-""}"
 
 
-# Funcion para salida mostrando un error
-
-
+# Funciones
+# Funcion que muestra el error por la salida de error
 error_exit() {
     echo "ERROR: $1" >&2
     echo "" >&2
@@ -20,9 +20,7 @@ error_exit() {
 }
 
 
-# Funcion para mostrar el uso del programa (-h | --help)
-
-
+# Funcion que muestra el uso del script
 usage() {
     cat << _EOF_
 Uso: open_files [-h | --help] [-f regexp] [-o] [--offline] [-u usuario...] [-s] [-sort] [--sort]
@@ -37,8 +35,50 @@ _EOF_
 }
 
 
-# 1. Funcion para procesar la linea de comandos
+# Funcion que comprueba si un directorio existe (nos interesa solo el estado de salida; 0 o 1)
+existe_directorio() {
 
+    if [[ -d "$1" ]]; then
+        return 0
+    else 
+        return 1
+    fi
+}
+
+
+# Funcion que comprueba si un usuario existe (nos interesa solo el estado de salida; 0 o 1)
+existe_usuario() {
+    id "$1" > /dev/null 2> /dev/null
+}
+
+
+# Funcion que obtiene la id de un usuario
+get_id_usuario() {
+    id -u "$1" 2> /dev/null
+}
+
+
+# Funcion que comprueba si el comando lsof esta instalado en el sistema
+lsof_instalado() {
+    type lsof > /dev/null 2> /dev/null
+}
+
+
+# Funcion que obtiene la cantidad de archivos abiertos en funcion de los datos que tengamos
+get_open_files() {
+    if [[ "$DIR" != "" && "$REGEX" != "" ]]; then
+        lsof -u "$1" -a +D "$DIR" 2> /dev/null | awk -v regexpr="$REGEX" 'NR > 1 && $5 == "REG" && $9 ~ regexpr' | wc -l
+    elif [[ "$DIR" != "" ]]; then
+        lsof -u "$1" -a +D "$DIR" 2> /dev/null | awk 'NR > 1 && $5 == "REG"' | wc -l
+    elif [[ "$REGEX" != "" ]]; then
+        lsof -u "$1" 2> /dev/null | awk -v regexpr="$REGEX" 'NR > 1 && $5 == "REG" && $9 ~ regexpr' | wc -l 
+    else 
+        lsof -u "$1" 2> /dev/null | awk 'NR >1 && $5 == "REG"' | wc -l
+    fi
+}
+
+
+# Funcion que procesa los argumentos recibidos por la linea de comandos
 procesar_argumentos() {
 
     while [[ "$1" != "" ]]
@@ -57,7 +97,7 @@ procesar_argumentos() {
                 if [[ "$1" == "" || "$1" == -* ]]; then
                     error_exit "Falta el argumento de -f"
                 fi
-                REGEX_ARCHIVO="$1"
+                REGEX="$1"
                 shift
                 ;;
             -u)
@@ -71,7 +111,7 @@ procesar_argumentos() {
                     shift
                 done
                 ;;
-            -s | --sort)
+            -s | -sort | --sort)
                 SORT=1
                 shift
                 ;;
@@ -89,35 +129,18 @@ procesar_argumentos() {
 procesar_argumentos "$@"
 
 
+# ===============================================================================================
+# 2. Comprobaciones de ejecucion
+# ===============================================================================================
 
-# 2. Comprobaciones
 
-# - Comprobacion de OPEN_FILE_FOLDER (si esta definida)
-
-
-# Funcion que comprueba si un directorio existe (nos interesa solo el estado de salida; 0 o 1)
-existe_directorio() {
-
-    if [[ -d "$1" ]]; then
-        return 0
-    else 
-        return 1
-    fi
-}
-
-if [[ "$OPEN_FILES_FOLDER" != "" ]]; then
-    if ! existe_directorio "$OPEN_FILES_FOLDER"; then
-        error_exit "La ruta OPEN_FILES_FOLDER no existe o no es un directorio: $OPEN_FILES_FOLDER."
+if [[ "$DIR" != "" ]]; then
+    if ! existe_directorio "$DIR"; then
+        error_exit "El directorio de la variable de entorno $DIR no existe o no es un directorio."
     fi
 fi
 
 
-# - Comprobacion de si lsof esta instalado 
-
-
-lsof_instalado() {
-    type lsof > /dev/null 2> /dev/null
-}
 
 if ! lsof_instalado; then
     error_exit "No esta instalado el comando lsof."
@@ -126,12 +149,6 @@ fi
 
 # - Comprobacion de que los usuarios existan
 
-
-# Funcion que comprueba si un usuario existe (nos interesa solo el estado de salida; 0 o 1)
-existe_usuario() {
-    id "$1" > /dev/null 2> /dev/null
-}
-
 for users in $LISTA_USERS; do
     if ! existe_usuario "$users"; then
         # Usamos comillas simples ('') para que cuando se imprima se vea el nombre de usuario entre comillas simples, no por sintaxis
@@ -139,4 +156,49 @@ for users in $LISTA_USERS; do
     fi
 done
 
+
+# ======================================================================================================================================
 # 3. Logica del programa
+# ======================================================================================================================================
+
+
+main() {
+
+    USUARIOS_ONLINE=""
+    # - Obtenemos usuarios conectados
+    if [[ "$OFFLINE" == "1" ]]; then
+        USUARIOS_ONLINE=$(who | cut -d' ' -f1 | sort | uniq)
+    fi
+
+    ARGUMENTOS_LSOF=""
+    # - Obtenemos argumentos para lsof
+    if [[ "$OPEN_FILES_FOLDER" != "" ]]; then
+        ARGUMENTOS_LSOF="+D $OPEN_FILES_FOLDER"
+    fi
+
+    # - Ejecutamos el comando 'lsof' con los argumentos que acabamos de obtener
+    DATOS=$(lsof $ARGUMENTOS_LSOF 2> /dev/null | tail -n +2 | while read -r cmd pid user fd type device size node name; do
+
+    # Filtro 1: Ignorar aquellos que no sean regulares (directorios, etc)
+    if [[ "$type" != "REG" ]]; then
+        continue
+    fi
+
+    # Filtro 2: (-o | --offline) Ignorar usuarios conectados
+    if [[ "$OFFLINE" == "1" ]] && [[ " $USUARIOS_ONLINE " == *" $user "* ]]; then
+        continue
+    fi
+
+    # Filtro 3: (-u | --user) Solo usuarios indicados
+    if [[ "$LISTA_USERS" != "" ]] && [[ " $LISTA_USERS " != *" $user"* ]]; then
+        continue
+    fi
+
+    # Filtro 4: (-f | --file) Comprobar que la ruta del fichero es correcta
+    if [[ "$REGEX" != "" ]] && [[ ! "$name" =~ $REGEX ]]; then # no ponemos comillas en $REGEX_ARCHIVO para funcione como exp regular
+        continue
+    fi
+
+    done)
+
+}
