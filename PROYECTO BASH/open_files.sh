@@ -5,11 +5,12 @@
 
 SORT=0 # -s
 OFFLINE=0 # -o
-LISTA_USERS="" # -u
+LISTA_USERS=$(who | cut -d' ' -f1 | sort | uniq | tr '\n' ' ') # -u
+USERS=0
 REGEX="" # -f
 DIR="${OPEN_FILES_FOLDER:-""}"
 USUARIOS_ONLINE=""
-ARGUMENTOS_LSOF=""
+FORMATO="%-12s %10s %6s %12s\n"
 
 # ===============================================================================================
 # 1. Funciones.
@@ -18,8 +19,6 @@ ARGUMENTOS_LSOF=""
 # Funcion que muestra el error por la salida de error.
 error_exit() {
     echo "ERROR: $1" >&2
-    echo "" >&2
-    usage >&2
     exit 1
 }
 
@@ -69,7 +68,7 @@ lsof_instalado() {
 
 
 # Funcion que obtiene la cantidad de archivos abiertos en funcion de los datos que tengamos.
-get_open_files() {
+get_open_files_num() {
     if [[ "$DIR" != "" && "$REGEX" != "" ]]; then
         lsof -u "$1" -a +D "$DIR" 2> /dev/null | awk -v regexpr="$REGEX" 'NR > 1 && $5 == "REG" && $9 ~ regexpr' | wc -l
     elif [[ "$DIR" != "" ]]; then
@@ -118,6 +117,9 @@ procesar_argumentos() {
                 ;;
             -u)
                 shift 
+                USERS=1
+                # La vaciamos si se introdujo -u, para no usar la que esta por defecto
+                LISTA_USERS=""
                 if [[ "$1" == "" || "$1" == -* ]]; then
                     error_exit "Falta el argumento de -u"
                 fi
@@ -141,6 +143,8 @@ procesar_argumentos() {
     done
 }
 
+# Pasamos argumentos de la linea de comandos.
+procesar_argumentos "$@"
 
 # ===============================================================================================
 # 2. Comprobaciones de ejecucion.
@@ -183,6 +187,31 @@ main() {
     fi
 
     if [[ $OFFLINE == 1 ]]; then
-        USUARIOS_ONLINE=$(who | cut -d" " -f1 | sort | uniq -c)
+        USUARIOS_ONLINE=$(who | cut -d" " -f1 | sort | uniq)
+        ALL_USUARIOS=$(cut -d: -f1 /etc/passwd | sort | uniq)
+
+        USUARIOS_OFFLINE=$(comm -23 <(echo "$ALL_USUARIOS") <(echo "$USUARIOS_ONLINE"))
+
+        if [[ $USERS == 1 ]]; then
+            USUARIOS_FILTRADOS=""
+            for user in $LISTA_USERS; do
+                if echo "$USUARIOS_OFFLINE" | grep -q "^${user}$"; then
+                    USUARIOS_FILTRADOS="$USUARIOS_FILTRADOS $user"
+                fi
+            done
+            LISTA_USERS="$USUARIOS_FILTRADOS"
+        else 
+            LISTA_USERS=$(echo "$USUARIOS_OFFLINE" | tr '\n' ' ')
+        fi
     fi
+
+    # Escribimos la tabla por pantalla
+    printf "$FORMATO" USUARIO UID PID_ANTIGUO N_ARCHIVOS
+    for user in $LISTA_USERS; do
+        printf "$FORMATO" $user $(get_id_usuario $user) $(get_proceso_mas_antiguo $user) $(get_open_files_num $user)
+    done | $SORT_CMD
+
 }
+
+# Ejecutamos la funcion principal.
+main
