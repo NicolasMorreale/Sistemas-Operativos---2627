@@ -6,7 +6,6 @@
 
 OPCION_D=0
 DIR=""
-OPCION_U=0
 LISTA_USUARIOS=$USER
 
 # ================================================================
@@ -82,7 +81,6 @@ procesar_opciones_() {
                 shift
                 ;;
             -u)
-                OPCION_U=1
                 LISTA_USUARIOS=""
                 shift
                 if [[ "$1" == "" || "$1" == -* ]]; then
