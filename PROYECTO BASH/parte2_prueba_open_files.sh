@@ -74,12 +74,39 @@ procesar_argumentos() {
         esac
     done
 }
+
+procesar_argumentos "$@"
+
 # Comprobacion de ejecucion
 
 if ! lsof_en_path; then
     error_exit "ERROR. El comando 'lsof' no esta instalado en el path."
 fi
 
-if [[ ]]
+if [[ $OPCION_F -eq 1 && $OPCION_E -eq 1 ]]; then
+    error_exit "ERROR. Incompatibilidad detectada: No puede utilizar la opcion -f y -e simultaneamente."
+fi
+
+if [[ $OPCION_E -eq 1 ]]; then
+    if [[ "$OPEN_FILES_REG" == "" ]]; then
+        error_exit "ERROR. La opcion -e requiere que la variable de entorno OPEN_FILES_REG sea no vacia."
+    fi
+    FILTRO="$OPEN_FILES_REG"
+fi
 
 # Programa principal
+
+main() {
+
+    SORT_CMD="sort -k2,2nr"
+
+    if [[ $OPCION_R -eq 1 ]]; then
+        SORT_CMD="sort -k2,2"
+    fi
+
+    printf "%-20s %s\n" "USUARIO" "N_ARCHIVOS"
+    for usuario in $LISTA_USUARIOS; do
+        num_archivos=$(get_num_archivos_abiertos $usuario)
+        printf "%-20s %s\n" "$usuario" "$num_archivos"
+    done | $SORT_CMD
+}
