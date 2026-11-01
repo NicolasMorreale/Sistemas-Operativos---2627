@@ -1,5 +1,6 @@
 #!/bin/bash
-
+# SSOO
+# Nicolas Morreale Toledo: DISK MONITOR
 # Variables.
 
 opcion_R=0
@@ -7,6 +8,7 @@ opcion_T=0
 opcion_P=0
 
 TIPOS_SISTEMAS=""
+PORCENTAJE=-1
 
 # Variables de entorno.  MIN_USE_PCT -> Cantidad minima para filtrar el uso al mostrarlo (uso > MIN_USE_PCT)
 
@@ -73,6 +75,8 @@ procesar_opciones() {
     done
 }
 
+procesar_opciones "$@"
+
 # Comprobaciones de ejecucion.
 
 if ! df_installed; then
@@ -81,13 +85,13 @@ fi
 
 if [[ $opcion_P -eq 1 ]]; then
 
-    if ! [[ "$PORCENTAJE" =~ "^[0-9]+$" ]] || [[ "$PORCENTAJE" -gt 100 || "$PORCENTAJE" -lt 0 ]]; then
+    if ! [[ "$PORCENTAJE" =~ ^[0-9]+$ ]] || [[ "$PORCENTAJE" -gt 100 || "$PORCENTAJE" -lt 0 ]]; then
         error_exit "ERROR. El porcentaje introducido en la opcion -p esta fuera del rango valido (0-100)%."
     fi
 
 elif [[ "$MIN_USE_PCT" != "" ]]; then
 
-    if ! [[ "$PORCENTAJE" =~ "^[0-9]+$" ]] || [[ "$MIN_USE_PCT" -gt 100 || "$MIN_USE_PCT" -lt 0 ]]; then
+    if ! [[ "$MIN_USE_PCT" =~ ^[0-9]+$ ]] || [[ "$MIN_USE_PCT" -gt 100 || "$MIN_USE_PCT" -lt 0 ]]; then
         error_exit "ERROR. El valor de la variable de entorno MIN_USE_PCT esta fuera del rango valido (0-100)."
     fi
     PORCENTAJE="$MIN_USE_PCT"
