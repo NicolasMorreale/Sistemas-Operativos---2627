@@ -22,6 +22,10 @@
 // Necesarias para llamar a read(), write(), close()
 #include <unistd.h>
 
+#include <cstdlib>
+#include <filesystem>
+#include <system_error>
+
 /**
 @brief Funcion que construye el objeto std::system_error una vez y asi lo llamamos en cualquier lugar del codigo
 y captura 'errno' en el instante que detecte el error.
@@ -100,27 +104,133 @@ bool is_same_file(const std::string& src_path, const std::string& dest_path) {
 
 
 /**
-@brief 
+@brief Funcion copy_file, que copia lo que hay en el archivo ORIGEN en el archivo DESTINO.
+@param src_path, dest_path, dst_perms
 */
 
 std::expected<void, std::system_error> copy_file(const std::string& src_path, const std::string& dest_path,
      mode_t dst_perms = 0644) {
-          // Abrimos el archivo ORIGEN
-          int src_fd = open(src_path.c_str(), O_RDONLY);
-          if(src_fd == -1) {
-               system_error_from_errno("error al abrir el archivo ORIGEN.");
-          }
+     // Abrimos el archivo ORIGEN
+     int src_fd = open(src_path.c_str(), O_RDONLY);
+     if(src_fd == -1) {
+          system_error_from_errno("error al abrir el archivo ORIGEN.");
+     }
 
-          // Abrimos el archivo DESTINO
-          // Siempre que se usa O_CREAT , se pasa dst_perms, por que sino se crea el archivo con permisos aleatorios
-          int dest_fd = open(dest_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, dst_perms);
-          if(dest_fd == -1) {
-               auto error = system_error_from_errno("error al abrir el archivo DESTINO.");
+     // Abrimos el archivo DESTINO
+     // Siempre que se usa O_CREAT , se pasa dst_perms, por que sino se crea el archivo con permisos aleatorios
+     int dest_fd = open(dest_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, dst_perms);
+     if(dest_fd == -1) {
+          auto error = system_error_from_errno("error al abrir el archivo DESTINO.");
+          close(dest_fd);
+          return error;
+     }
+     // Reservamos un buffer de tamaño 128kB
+     constexpr std::size_t buffer_size=131072;
+     std::vector<std::uint8_t> buffer(buffer_size);
+          
+     while(true) {
+
+          // Solicita leer hasta 128kB de src_fd y guardar en el buffer.
+          ssize_t bytes_read = read(src_fd, buffer.data(), buffer.size());
+
+          // Si ocurre error de lectura, se captura errno antes de cerrar los descriptores de archivos y se devuelve el error.
+          if(bytes_read == -1) {
+               auto error = system_error_from_errno("error al leer el archivo de ORIGEN.");
+               close(src_fd);
                close(dest_fd);
                return error;
           }
-          // Reservamos un buffer de tamaño 128KB
-          constexpr std::size_t buffer_size=131072;
-          std::vector<std::uint8_t> buffer(buffer_size);
 
+          // Cuando read() devuelve 0, es porque se llego al final del archivo (EOF), por lo que finaliza el bucle de copia.
+          if(bytes_read == 0) {
+               break;
+          }
+
+          std::size_t total_written = 0;
+          // : Convierte el número de bytes leídos de ssize_t (con signo) a size_t (sin signo),
+          // para operar con tamaños de memoria e inicializa el contador de bytes escritos en este bloque.
+          const auto bytes_to_write = static_cast<std::size_t>(bytes_read);
+          while (total_written < bytes_to_write) {
+               // Escribe a partir de la posición pendiente del búfer (buffer.data() + total_written)
+               // los bytes que aún faltan (bytes_to_write - total_written)
+               ssize_t bytes_written = write(dest_fd, buffer.data() + total_written, bytes_to_write - total_written);
+               
+               // Verificamos si hubieron errores a la hora de escribir en el archivo
+               if(bytes_written == -1) {
+                    auto error = system_error_from_errno("error al escribir en el archivo de DESTINO.");
+                    close(src_fd);
+                    close(dest_fd);
+                    return error;
+               }
+               // Si no hubo error, acumulamos los bytes de esta iteracion
+               total_written += static_cast<std::size_t>(bytes_written);
+          }
      }
+     // Liberamos los descriptores antes de salir de la funcion
+     close(src_fd);
+     close(dest_fd);
+     // Devuelve un std::expected<void, std::system_error> vacío para comunicar que toda la copia se completó con éxito.
+     return {};
+}
+
+
+
+/**
+@brief 
+*/
+
+int protected_main(int argc, char* argv[]) {
+     if(!check_args(argc, argv)) {
+          return EXIT_FAILURE;
+     }
+
+     std::string src_path = argv[1];
+     std::string dest_path = argv[2];
+     
+     // Si son directorios, construimos las rutas.
+     if(is_directory(dest_path)) {
+
+          std::filesystem::path src(src_path);
+          std::filesystem::path dest(dest_path);
+
+          // Concatenar rutas de archivos o directorios añadiendo el separador de carpetas (/)
+          dest /= src.filename();
+          dest_path = dest.string();
+     }
+
+     if(is_same_file(src_path, dest_path)) {
+          std::println(stderr, "copy: ORIGEN y DESTINO son el mismo archivo.");
+          return EXIT_FAILURE;
+     }
+
+     auto result = copy_file(src_path, dest_path);
+
+     // Si copy_file falla.
+     if(!result.has_value()) {
+          std::println(stderr, "copy: {}", result.error().what());
+          return EXIT_FAILURE;
+     }
+     
+     return EXIT_SUCCESS;
+}
+
+/**
+@brief Programa principal
+ */
+
+int main(int argc, char* argv[]) {
+
+     try {
+          return protected_main(argc, argv);
+     }
+     // Tipo especifico
+     catch (const std::system_error& e) {
+          std::println(stderr, "copy: error inesperado ({}): {}", e.code().value(), e.what());
+     }
+     // Tipo mas general
+     catch (const std::exception& e) {
+          std::println(stderr, "copy: error inesperado: {}", e.what())
+     }
+
+     return EXIT_FAILURE;
+}
