@@ -40,6 +40,7 @@ existe_dir() {
     fi
 }
 
+# Funcion que muestra la salida si no se especifican opciones 
 salida_estandar() {
     ARGUMENTOS_LSOF=""
     for directorios in $HOME $RUTA_PATH; do
@@ -49,6 +50,14 @@ salida_estandar() {
     done
 
     lsof $ARGUMENTOS_LSOF 2>/dev/null | awk 'NR > 1'
+}
+
+get_pids_user() {
+    ps -u "$1" 2>/dev/null | awk 'NR > 1 {print $1}'
+}
+
+get_dir_actual_pwdx() {
+    pwdx "$1" 2>/dev/null | awk '{print $2}'
 }
 
 procesar_op() {
@@ -121,11 +130,11 @@ fi
 
 main() {
 
-    # Ejecutar modo -w.
+    # Ejecutar opcion -w.
     if [[ $OPCION_W -eq 1 ]]; then
-        pids=$(ps -u $USER 2>/dev/null | awk 'NR > 1 {print $1}')
-        for pid in $pids; do
-            dir_actual=$(pwdx "$pid" 2>/dev/null | awk '{print $2}')
+        PIDS=$(get_pids_user "$USER")
+        for pid in $PIDS; do
+            dir_actual=$(get_dir_actual_pwdx "$pid")
             if [[ "$dir_actual" != "" && existe_dir "$dir_actual" ]]; then
                 lsof +D "$dir_actual" 2>/dev/null | awk 'NR > 1'
             else
@@ -134,11 +143,15 @@ main() {
         done
     fi
 
+    # Ejecutar opciones -d,-u
+
+    # Meter el usuario
     PARAMETROS_LSOF=""
     if [[ $OPCION_U -eq 1 ]]; then
         PARAMETROS_LSOF="-u $USUARIO"
     fi
 
+    # Decidir el/los directorio/s
     DIRECTORIOS_A_BUSCAR=""
     if [[ $OPCION_D -eq 1 || "$OPEN_FILES_FOLDER" != "" ]]; then
         if [[ $OPCION_D -eq 1 ]]; then
@@ -152,10 +165,12 @@ main() {
         DIRECTORIOS_A_BUSCAR="$HOME $RUTA_PATH"
     fi
 
+    # Meter o no el and logico
     if [[ $OPCION_U -eq 1 && "$DIRECTORIOS_A_BUSCAR" != "" ]]; then
         PARAMETROS_LSOF="$PARAMETROS_LSOF -a"
     fi
 
+    # Meter el/los directorio/s
     for dir in $DIRECTORIOS_A_BUSCAR; do
         if existe_dir "$dir"; then
             PARAMETROS_LSOF="$PARAMETROS_LSOF +D $dir"
