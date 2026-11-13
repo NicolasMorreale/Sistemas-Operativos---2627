@@ -10,18 +10,9 @@
 #include <string>
 #include <vector>
 #include <errno.h> // declara la variable global "errno", donde el SO almacena el codigo de erro al fallar una llamada
-
-
-// Contiene la declaracion de la llamada al sistema stat(), la declaracion de struct stat
-#include <sys/stat.h>
-
-// Proporciona la declaración de open()
-// y las constantes para los modos y opciones de apertura (O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC)
-#include <fcntl.h>
-
-// Necesarias para llamar a read(), write(), close()
-#include <unistd.h>
-
+#include <sys/stat.h>  // Contiene la declaracion de la llamada al sistema stat(), la declaracion de struct stat
+#include <fcntl.h> // Proporciona la declaración de open() y constantes para los modos y opciones de apertura (O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC)
+#include <unistd.h> // Necesaria para llamar a read(), write(), close()
 #include <cstdlib>
 #include <filesystem>
 #include <system_error>
