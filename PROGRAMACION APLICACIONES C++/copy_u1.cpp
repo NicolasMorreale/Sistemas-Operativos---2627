@@ -26,10 +26,14 @@
 #include <filesystem>
 #include <system_error>
 
+
 /**
-@brief Funcion que construye el objeto std::system_error una vez y asi lo llamamos en cualquier lugar del codigo
+ * @brief Funcion que construye el objeto std::system_error una vez y asi lo llamamos en cualquier lugar del codigo
 y captura 'errno' en el instante que detecte el error.
-*/
+ * 
+ * @param context 
+ * @return std::unexpected<std::system_error> 
+ */
 
 std::unexpected<std::system_error> system_error_from_errno(std::string context) {
      return std::unexpected(std::system_error(errno, std::system_category(), std::move(context)));
@@ -37,10 +41,15 @@ std::unexpected<std::system_error> system_error_from_errno(std::string context) 
 
 
 
-/* 
-@brief Funcion para comprobar las condiciones sobre el número de argumentos indicados en la línea de
-comandos, implementa la siguiente función: bool check_args()
-*/
+/**
+ * @brief Funcion para comprobar las condiciones sobre el número de argumentos indicados en la línea de
+comandos
+ * 
+ * @param argc 
+ * @param argv 
+ * @return true 
+ * @return false 
+ */
 
 bool check_args(int argc, char* argv[]) {
      if(argc != 3) {
@@ -52,13 +61,13 @@ bool check_args(int argc, char* argv[]) {
 
 
 
-/*
-Para comprobar si el archivo indicado en DESTINO es un directorio, implementa la siguiente
-función: bool is_directory()
-
-Esta función debe devolver true si la ruta path corresponde a un directorio y false en caso
-contrario. Para comprobarlo se puede usar la función stat() descrita en la Sección A.7.
-*/
+/**
+ * @brief Funcion para comprobar si el archivo indicado en DESTINO es un directorio
+ * 
+ * @param path 
+ * @return true 
+ * @return false 
+ */
 
 bool is_directory(const std::string& path) {
 
@@ -78,13 +87,15 @@ bool is_directory(const std::string& path) {
 
 
 
-/*
-@brief Funcion para comprobar si las rutas de origen y destino conducen al mismo archivo, implementa la
-siguiente función: bool is_same_file().
-
-Esta función debe devolver true si ambas rutas corresponden al mismo archivo y false en
-caso contrario, usando la técnica descrita en la Sección A.7.1.
-*/
+/**
+ * @brief Funcion para comprobar si las rutas de origen y destino conducen al mismo archivo, implementa la
+     siguiente función: bool is_same_file().
+ * 
+ * @param src_path 
+ * @param dest_path 
+ * @return true 
+ * @return false 
+ */
 
 bool is_same_file(const std::string& src_path, const std::string& dest_path) {
      // Almacenamos por separado los atributos del archivo ORIGEN y el DESTINO
@@ -104,9 +115,13 @@ bool is_same_file(const std::string& src_path, const std::string& dest_path) {
 
 
 /**
-@brief Funcion copy_file, que copia lo que hay en el archivo ORIGEN en el archivo DESTINO.
-@param src_path, dest_path, dst_perms
-*/
+ * @brief Funcion copy_file, que copia lo que hay en el archivo ORIGEN en el archivo DESTINO.
+ * 
+ * @param src_path 
+ * @param dest_path 
+ * @param dst_perms 
+ * @return std::expected<void, std::system_error> 
+ */
 
 std::expected<void, std::system_error> copy_file(const std::string& src_path, const std::string& dest_path,
      mode_t dst_perms = 0644) {
@@ -176,8 +191,12 @@ std::expected<void, std::system_error> copy_file(const std::string& src_path, co
 
 
 /**
-@brief 
-*/
+ * @brief Funcion principal protegida
+ * 
+ * @param argc 
+ * @param argv 
+ * @return int 
+ */
 
 int protected_main(int argc, char* argv[]) {
      if(!check_args(argc, argv)) {
@@ -214,8 +233,15 @@ int protected_main(int argc, char* argv[]) {
      return EXIT_SUCCESS;
 }
 
+
+
+
 /**
-@brief Programa principal
+ * @brief Funcion principal
+ * 
+ * @param argc 
+ * @param argv 
+ * @return int 
  */
 
 int main(int argc, char* argv[]) {
