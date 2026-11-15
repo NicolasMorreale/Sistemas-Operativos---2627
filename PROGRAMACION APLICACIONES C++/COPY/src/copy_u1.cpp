@@ -127,7 +127,7 @@ std::expected<void, std::system_error> copy_file(const std::string& src_path, co
      int dest_fd = open(dest_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, dst_perms);
      if(dest_fd == -1) {
           auto error = system_error_from_errno("error al abrir el archivo DESTINO.");
-          close(dest_fd);
+          close(src_fd);
           return error;
      }
      // Reservamos un buffer de tamaño 128kB
