@@ -13,7 +13,7 @@
  * @file copy_files.cc
  * @brief Contiene las definiciones de las funciones declaradas en el fichero copy_files.h
  * 
- */
+*/
 
 #include "copy_files.h"
 
@@ -25,7 +25,7 @@
  * 
  * @param context Cadena de texto que describe donde, como o porque surgio el error.
  * @return std::unexpected<std::system_error> Objeto inesperado con el codigo de error.
- */
+*/
 
 std::unexpected<std::system_error> system_error_from_errno(std::string context) {
     return std::unexpected(std::system_error(errno, std::system_category(), std::move(context)));
@@ -43,7 +43,7 @@ std::unexpected<std::system_error> system_error_from_errno(std::string context) 
  * @param argv Array con los argumentos introducidos por linea de comandos (contando con el nombre del ejecutable).
  * @return true 
  * @return false 
- */
+*/
 
 bool check_args(int argc, char* argv[]) {
     if(argc != 3) {
@@ -67,7 +67,7 @@ bool check_args(int argc, char* argv[]) {
  * @param path Cadena de texto que contiene la ruta del directorio a comprobar
  * @return true 
  * @return false 
- */
+*/
 
 bool is_directory(const std::string& path) {
     struct stat st {};
@@ -86,11 +86,11 @@ bool is_directory(const std::string& path) {
  la llamada al sistema stat() para cada ruta, consultando los metadatos de los archivos y comprueba si falla, en ese caso, retorna false,
     y en caso de exito, comprueba si coinciden el identificador de dispositivo (st_dev) y el numero de nodo (st_ino) de ambos archivos.
  * 
- * @param src_path 
- * @param dest_path 
+ * @param src_path Ruta del directorio ORIGEN
+ * @param dest_path Ruta del directorio DESTINO
  * @return true Si nada coincide y no hay errores
  * @return false En caso contrario
- */
+*/
 
 bool is_same_file(const std::string& src_path, const std::string& dest_path) {
     struct stat src_st{};
@@ -101,6 +101,45 @@ bool is_same_file(const std::string& src_path, const std::string& dest_path) {
     }
     return (src_st.st_dev == dest_st.st_dev) && (src_st.st_ino == dest_st.st_ino);
 }
+
+
+
+
+/**
+ * @brief Lleva un registro de los ficheros que se han copiado y su tamaño.
+ *  Usamos la macro O_APPEND, para que no se borre lo que haya en el registro al añadir algo nuevo (O_TRUNC)
+ * @param log_path 
+ * @param file_path 
+ * @param file_size 
+ * @return std::expected<void, std::system_error> 
+ */
+
+std::expected<void, std::system_error> log_copied_file(const std::string& log_path, const std::string& file_path, std::size_t file_size) {
+    int log_fd = open(log_path.c_str(), O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if(log_fd == -1) {
+        return system_error_from_errno("ERROR al abrir el fichero registro.");
+    }
+
+    std::string file_name = std::filesystem::path(file_path).filename().string(); // Extrae unicamente el nombre del archivo, de toda la ruta
+    std::string entry = std::format("Nombre archivo: {} | Tamaño: {} bytes\n", file_name, file_size);
+    std::size_t total_written = 0;
+
+    while (total_written < entry.size()) { // Se escriben todos los bytes de la cadena entry en log_fd, reintentandose si errno = EINTR (falso error)
+        ssize_t written = write(log_fd, entry.data() + total_written, entry.size() - total_written) {
+            if(written == -1) {
+                if(errno == EINTR) continue;
+                auto error = system_error_from_errno("ERROR al escribir en el fichero registro.");
+                close(log_fd);
+                return error;
+            }
+            total_written += static_cast<std::size_t>(written);
+        }
+    }
+    close(log_fd);
+    return {};
+}
+
+
 
 
 
@@ -119,13 +158,16 @@ bool is_same_file(const std::string& src_path, const std::string& dest_path) {
 
 
  * 
- * @param src_path 
- * @param dest_path 
- * @param dest_perms 
+ * @param src_path Ruta del fichero ORIGEN
+ * @param dest_path Ruta del fichero DESTINO
+ * @param dest_perms Permisos del fichero DESTINO
+ * @param log_path Ruta del fichero donde llevar el registro de copy_file
  * @return std::expected<void, std::system_error> 
- */
+*/
 
-std::expected<void, std::system_error> copy_file(const std::string& src_path, const std::string& dest_path, mode_t dest_perms) {
+std::expected<void, std::system_error> copy_file(const std::string& src_path, const std::string& dest_path, mode_t dest_perms,
+ const std::string& log_path) { // Modificacion, añadimos log_path para llevar el registro de los ficheros copiados
+
     int src_fd = open(src_path.c_str(), O_RDONLY);
     if(src_fd == -1) {
         return system_error_from_errno("ERROR al abrir el fichero ORIGEN.");
@@ -162,7 +204,7 @@ std::expected<void, std::system_error> copy_file(const std::string& src_path, co
             ssize_t written = write(dest_fd, buffer.data() + total_written, bytes_to_write - total_written);
             if(written == -1) {
                 if(errno == EINTR) continue; // No es error, sino interrupcion por la llamada al sistema
-                auto error = system_error_from_errno("ERROR al escribor en el archivo DESTINO.");
+                auto error = system_error_from_errno("ERROR al escribir en el archivo DESTINO.");
                 close(src_fd);
                 close(dest_fd);
                 return error;
@@ -171,7 +213,19 @@ std::expected<void, std::system_error> copy_file(const std::string& src_path, co
         }
     }
 
+    // Modificacion para llevar el registro de los ficheros copiados. Antes de cerrar los descriptores de archivo, la
+    // llamada al sistema fstat() pasa a dest_st.st_size el tamaño en bytes.
+
+    struct stat dest_st{};
+    if(fstat(dest_st, &dest_st) == -1) {
+        auto error = system_error_from_errno("ERROR al obtener el tamaño del archivo DESTINO.");
+        close(src_fd);
+        close(dest_fd);
+        return error;
+    }
+
     close(src_fd);
     close(dest_fd);
-    return {};
+    // Lo colocamos al final para que el registro se realice solo cuando copy_file() acabe sin errores.
+    return log_copied_file(log_path, dest_path, static_cast<std::size_t>(dest_st.st_size));
 }

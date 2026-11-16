@@ -12,7 +12,8 @@
 /**
  * @file main_copy_files.cc
  * @brief Archivo que contiene el programa principal.
- */
+ * Para compilar usar: g++-14 -std=c++23 -Wall -Wextra main_copy_files.cc copy_files.cc -o copy
+*/
 
 #include "copy_files.h"
 
@@ -26,7 +27,7 @@
  * @param argc 
  * @param argv 
  * @return int 
- */
+*/
 
 int protected_main(int argc, char* argv[]) {
     if(!check_args(argc, argv)) {
@@ -66,12 +67,12 @@ int protected_main(int argc, char* argv[]) {
  * @param argc 
  * @param argv 
  * @return int 
- */
+*/
 
 int main(int argc, char* argv[]) {
     try {
         return protected_main(argc, argv);
-    } catch(const std::sytem_error& e) {
+    } catch(const std::system_error& e) {
         std::println(stderr, "copy: error inesperado ({}): {}", e.code().value(), e.what());
     } catch(const std::exception& e) {
         std::println(stderr, "copy: error inesperado {}", e.what());

@@ -48,8 +48,10 @@ bool is_directory(const std::string& path);
 bool is_same_file(const std::string& src_path, const std::string& dest_path);
 
 // Funcion que realiza todo el trabajo de copiar el contenido de ORIGEN en DESTINO.
-std::expected<void, std::system_error> copy_file(const std::string& src_path, const std::string& dest_path, mode_t dest_perms = 0644);
+std::expected<void, std::system_error> copy_file(const std::string& src_path, const std::string& dest_path, mode_t dest_perms = 0644,
+ const std::string& log_path = "/tmp/copy_logfile");
 
-
+// Modificacionpara llevar un registro de los ficheros que se han copiado y su tamaño.
+std::expected<void, std::system_error> log_copied_file(const std::string& log_path, const std::string& file_path, std::size_t file_size)
 
 #endif

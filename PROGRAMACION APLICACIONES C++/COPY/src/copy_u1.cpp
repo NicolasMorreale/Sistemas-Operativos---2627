@@ -19,6 +19,12 @@
 
 
 /**
+ * @file co
+ * @brief 
+ * 
+ */
+
+/**
  * @brief Funcion que construye el objeto std::system_error una vez y asi lo llamamos en cualquier lugar del codigo
 y captura 'errno' en el instante que detecte el error.
  * 
